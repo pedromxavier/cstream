@@ -1,1 +1,0 @@
-from .cstream import Stream, stderr, stdlog, stdwar, stdout, devnull

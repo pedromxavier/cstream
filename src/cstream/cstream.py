@@ -1,14 +1,17 @@
 """
 """
 ## Standard Library
-import sys
 import os
+import sys
+from io import StringIO
+from functools import wraps
+from contextlib import contextmanager
 from collections import namedtuple
 
 ## Third-Party
 import colorama
 
-## Constants
+## File Descriptors
 STDIN_FD = 0
 STDOUT_FD = 1
 STDERR_FD = 2
@@ -107,10 +110,12 @@ class Stream(object):
         )
         return f"{self.__class__.__name__}({self.lvl}, {params})"
 
-    def printf(self, *args, **kwargs):
+    def printf(self, *args, **kwargs) -> int:
         """"""
         if self.echo:
-            self._printf(*args, **kwargs)
+            return self._printf(*args, **kwargs)
+        else:
+            return 0
 
     def _printf(self, *args, **kwargs):
         """"""
@@ -177,10 +182,10 @@ class Stream(object):
 
     ## File interface
     def read(self):
-        raise NotImplementedError
+        raise OSError("Can't read from this stream.")
 
-    def write(self, s: str, *args, **kwargs):
-        self.printf(s, **kwargs)
+    def write(self, s: str) -> int:
+        return self.printf(s)
 
     @property
     def echo(self):
@@ -195,8 +200,32 @@ class Stream(object):
                 f"Invalid type `{type(lvl)}`` for debug lvl. Must be `int`."
             )
 
+class StringStream(Stream):
+    
+    @wraps(Stream.__init__)
+    def __init__(self, *args, **kwargs):
+        Stream.__init__(self, *args, **kwargs)
+        self._string_io = StringIO()
+
+    def __lshift__(self, s: str):
+        if self.echo:
+            print(self.string(s), file=self._string_io)
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        return None
+
+    def read(self) -> str:
+        return self._string_io.getvalue()
+
+    def write(self, s: str):
+        return self._string_io.write(s)
 
 class NullStream(object):
+    """Redirects both sys.stdout and sys.stderr to os.devnull."""
 
     __ref__ = None
 
@@ -207,24 +236,63 @@ class NullStream(object):
 
     def __enter__(self, *args, **kwargs):
         global sys
+        self.sys_stderr = sys.stderr
         self.sys_stdout = sys.stdout
-        sys.stdout = open(os.devnull, "w")
+        sys.stderr = sys.stdout = open(os.devnull, "w")
         return self
 
     def __exit__(self, *args, **kwargs):
         global sys
-        sys.stdout.close()
+        if not sys.stdout.closed():
+            sys.stdout.close()
+        if not sys.stderr.closed():
+            sys.stderr.close()
         sys.stdout = self.sys_stdout
+        sys.stderr = self.sys_stderr
         return None
 
+    def read(self) -> str:
+        raise OSError("Can't read from this stream.")
+
+
+    def write(self, s: str) -> int:
+        return 0
 
 class logfile:
+    """Duplicates STDERR file descriptor"""
+
     def __init__(self):
         self.fd = os.dup(STDERR_FD)
         self.file = os.fdopen(self.fd, mode="w", encoding="utf-8")
 
-    def write(self, s: str, *args, **kwargs):
-        self.file.write(s, *args, **kwargs)
+    def write(self, s: str) -> int:
+        return self.file.write(s)
+
+@contextmanager
+def redirect_stderr(target):
+    """
+    """
+    global sys
+    sys_stderr = sys.stderr
+    try:
+        sys.stderr = target
+        yield target
+    finally:
+        sys.stderr = sys_stderr
+        return
+
+@contextmanager
+def redirect_stdout(target):
+    """
+    """
+    global sys
+    sys_stdout = sys.stdout
+    try:
+        sys.stdout = target
+        yield target
+    finally:
+        sys.stdout = sys_stdout
+        return
 
 
 ## Initialize shell environment
@@ -239,4 +307,4 @@ stdout = Stream(file=sys.stdout)
 devnull = NullStream()
 
 ## Output
-__all__ = ["Stream", "stderr", "stdwar", "stdlog", "devnull"]
+__all__ = ["Stream", "StringStream", "redirect_stdout", "redirect_stderr", "stderr", "stdwar", "stdlog", "devnull"]
