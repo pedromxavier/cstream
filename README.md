@@ -16,16 +16,21 @@ Default `stderr`, `stdwar` and `stdlog` instances are directed to standard error
 ```python
 from cstream import Stream, stderr, stdout, stdlog, stdwar, devnull
 
-# Error messages
-stderr << "Error: You are wrong."
-stdwar << "Warning: Just a warning... in yellow."
-stdlog << "DEBUG: Some blue text printed to stderr"
+# Set debug level
+Stream.set_lvl(1)
 
-# Suppress output
+# Will be printed
+stderr[0] << "Error: You are wrong."
+
+# Gets printed also
+stdwar[1] << "Warning: Just a warning... in yellow."
+
+# Bypassed
+stdlog[2] << "DEBUG: Some blue text printed to stderr"
+
+# Suppress output written to stdout and stderr
 with devnull:
     print("Bye World?")
-
-
 ```
 
 ## Next steps:
