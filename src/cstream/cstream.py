@@ -1,6 +1,8 @@
 """
 """
-## Standard Library
+__version__ = "1.0.2"
+
+# Standard Library
 import os
 import sys
 from io import StringIO
@@ -8,10 +10,10 @@ from functools import wraps
 from contextlib import contextmanager
 from collections import namedtuple
 
-## Third-Party
+# Third-Party
 import colorama
 
-## File Descriptors
+# File Descriptors
 STDIN_FD = 0
 STDOUT_FD = 1
 STDERR_FD = 2
@@ -243,9 +245,9 @@ class NullStream(object):
 
     def __exit__(self, *args, **kwargs):
         global sys
-        if not sys.stdout.closed():
+        if not sys.stdout.closed:
             sys.stdout.close()
-        if not sys.stderr.closed():
+        if not sys.stderr.closed:
             sys.stderr.close()
         sys.stdout = self.sys_stdout
         sys.stderr = self.sys_stderr
