@@ -200,8 +200,8 @@ class Stream(object):
                 f"Invalid type `{type(lvl)}`` for debug lvl. Must be `int`."
             )
 
+
 class StringStream(Stream):
-    
     @wraps(Stream.__init__)
     def __init__(self, *args, **kwargs):
         Stream.__init__(self, *args, **kwargs)
@@ -224,6 +224,7 @@ class StringStream(Stream):
     def write(self, s: str):
         return self._string_io.write(s)
 
+
 class NullStream(object):
     """Redirects both sys.stdout and sys.stderr to os.devnull."""
 
@@ -243,9 +244,9 @@ class NullStream(object):
 
     def __exit__(self, *args, **kwargs):
         global sys
-        if not sys.stdout.closed():
+        if not sys.stdout.closed:
             sys.stdout.close()
-        if not sys.stderr.closed():
+        if not sys.stderr.closed:
             sys.stderr.close()
         sys.stdout = self.sys_stdout
         sys.stderr = self.sys_stderr
@@ -254,9 +255,9 @@ class NullStream(object):
     def read(self) -> str:
         raise OSError("Can't read from this stream.")
 
-
     def write(self, s: str) -> int:
         return 0
+
 
 class logfile:
     """Duplicates STDERR file descriptor"""
@@ -268,10 +269,10 @@ class logfile:
     def write(self, s: str) -> int:
         return self.file.write(s)
 
+
 @contextmanager
-def redirect_stderr(target):
-    """
-    """
+def redirect_stderr(target) -> Stream:
+    """"""
     global sys
     sys_stderr = sys.stderr
     try:
@@ -281,10 +282,10 @@ def redirect_stderr(target):
         sys.stderr = sys_stderr
         return
 
+
 @contextmanager
-def redirect_stdout(target):
-    """
-    """
+def redirect_stdout(target) -> Stream:
+    """"""
     global sys
     sys_stdout = sys.stdout
     try:
@@ -304,7 +305,18 @@ stderr = Stream(fg="RED", file=sys.stderr)
 stdwar = Stream(fg="YELLOW", file=sys.stderr)
 stdlog = Stream(fg="CYAN", file=logfile())  ## Initialize log file
 stdout = Stream(file=sys.stdout)
+stdstr = StringStream()
 devnull = NullStream()
 
 ## Output
-__all__ = ["Stream", "StringStream", "redirect_stdout", "redirect_stderr", "stderr", "stdwar", "stdlog", "devnull"]
+__all__ = [
+    "Stream",
+    "StringStream",
+    "redirect_stdout",
+    "redirect_stderr",
+    "stderr",
+    "stdwar",
+    "stdlog",
+    "stdstr",
+    "devnull",
+]
