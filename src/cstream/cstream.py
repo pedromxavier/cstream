@@ -8,6 +8,7 @@ from typing import TextIO
 
 # Standard Library
 import sys
+import os
 import threading as th
 import multiprocessing as mp
 from functools import wraps
@@ -241,6 +242,11 @@ class CStream(object):
     @property
     def end(self) -> str:
         return self.__end
+
+    @classmethod
+    def init(cls):
+        colorama.init()
+        os.system("")
 
 class NullStream(CStream):
 

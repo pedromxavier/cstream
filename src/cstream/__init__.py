@@ -12,6 +12,8 @@ from .constants import (
     CRITICAL,
 )
 
+CStream.init()
+
 __all__ = [
     "CStream",
     "NullStream",
