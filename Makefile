@@ -1,13 +1,16 @@
-all: build
+ifeq ($(OS),Windows_NT)
+	fname=".\Makefiles\windows.mk"
+else
+	fname="./Makefiles/linux.mk"
+endif
+
+all:
 
 build:
-	python -m build .
+	@make build --makefile=$(fname)
 
 deploy:
-	twine upload dist/*
+	@make deploy --makefile=$(fname)
 
 clean:
-	@del /s /q "src\\cstream.egg-info"
-	@rmdir /q "src\\cstream.egg-info"
-	@del /s /q dist
-	@rmdir /q dist
+	@make clean --makefile=$(fname)

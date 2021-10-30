@@ -1,37 +1,33 @@
 """
 """
-__version__ = "1.0.2"
+# Future Imports (Python < 3.10)
+from __future__ import annotations
+
+# Typing
+from typing import TextIO
 
 # Standard Library
-import os
 import sys
-from io import StringIO
+import threading as th
+import multiprocessing as mp
 from functools import wraps
 from contextlib import contextmanager
-from collections import namedtuple
 
 # Third-Party
 import colorama
 
-# File Descriptors
-STDIN_FD = 0
-STDOUT_FD = 1
-STDERR_FD = 2
+__version__ = "1.0.3"
 
 
-class Stream(object):
-    """Coloured text stream in C++ style with verbosity control.
+class CStream(object):
+    """"""
 
-    Example
-    -------
-    >>> Stream.set_lvl(0)
-    >>> mystream = Stream()
-    >>> mystream[1] << "Hello."
-    >>> mystream[0] << "Hello."
-    Hello.
-    >>> mystream << "Hello."
-    Hello.
-    """
+    # File Descriptors
+    STDIN_FD = 0
+    STDOUT_FD = 1
+    STDERR_FD = 2
+
+    RESET = colorama.Style.RESET_ALL
 
     COLORS = {
         "BLACK",
@@ -44,281 +40,240 @@ class Stream(object):
         "WHITE",
         None,
     }
+
+    # pylint: disable=no-self-argument,not-callable
+    def __echo(callback):
+        @wraps(callback)
+        def echo_callback(self, *args, **kwargs):
+            if self:
+                return callback(self, *args, **kwargs)
+
+        return echo_callback
+
     STYLES = {"DIM", "NORMAL", "BRIGHT", None}
 
-    RESET = colorama.Style.RESET_ALL
+    __slots__ = ("__bg", "_bg", "__fg", "_fg", "__sty", "_sty", "__end", "__file", "__level", "__flush")
+    __level__ = None
+    __echo__: bool = True
+    __lock__: th.Lock | mp.Lock | None = None
 
-    Params = namedtuple(
-        "params", ["bg", "fg", "sty", "file"], defaults=[None, None, None, sys.stdout]
-    )
+    T_LOCK = 1  # Thread lock
+    P_LOCK = 2  # Process Lock
 
-    __ref__ = {}
-    __lvl__ = None
-
-    def __new__(cls, lvl: int = 0, **kwargs: dict):
-        ## Gather parameters
-        params = cls.Params(**kwargs)
-
-        ## Check Background
-        if params.bg not in cls.COLORS:
-            raise ValueError(f"Color {params.bg} not available.\nOptions: {cls.COLORS}")
-        ## Check Foreground
-        if params.fg not in cls.COLORS:
-            raise ValueError(f"Color {params.fg} not available.\nOptions: {cls.COLORS}")
-        ## Check Style
-        if params.sty not in cls.STYLES:
+    def __init__(
+        self,
+        *,
+        bg: str | None = None,
+        fg: str | None = None,
+        sty: str | None = None,
+        end: str | None = None,
+        file=None,
+        level: int | None = None,
+        flush: bool = False,
+    ):
+        """"""
+        # -*- Type Checking -*-
+        if bg is not None and not isinstance(bg, str):
+            raise ValueError(f"'bg' must be of type 'str' or 'None', not '{type(bg)}'")
+        if fg is not None and not isinstance(fg, str):
+            raise ValueError(f"'fg' must be of type 'str' or 'None', not '{type(fg)}'")
+        if sty is not None and not isinstance(sty, str):
             raise ValueError(
-                f"Style {params.sty} not available.\nOptions: {cls.STYLES}"
+                f"'sty' must be of type 'str' or 'None', not '{type(sty)}'"
+            )
+        if end is not None and not isinstance(end, str):
+            raise ValueError(
+                f"'end' must be of type 'str' or 'None', not '{type(end)}'"
+            )
+        if level is not None and not isinstance(level, int):
+            raise ValueError(
+                f"'level' must be of type 'int' or 'None', not '{type(level)}'"
+            )
+        if not isinstance(flush, bool):
+            raise TypeError(f"'flush' must be of type 'bool', not '{type(flush)}'")
+
+        # -*- Value Checking -*-
+        if bg not in self.COLORS:
+            raise ValueError(f"Color {bg!r} not available. Options are {self.COLORS}")
+        else:
+            self._bg = bg
+        if fg not in self.COLORS:
+            raise ValueError(f"Color {fg!r} not available. Options are {self.COLORS}")
+        else:
+            self._fg = fg
+        if sty not in self.STYLES:
+            raise ValueError(f"Style {sty!r} not available. Options: are {self.STYLES}")
+        else:
+            self._sty = sty
+
+        if file is None:
+            self.__file = sys.stdout
+        else:
+            self.__file = file
+
+        self.__level = level
+        self.__flush = flush
+
+        if self._bg is None:
+            self.__bg = ""
+        else:
+            self.__bg = getattr(colorama.Back, self._bg)
+
+        if self._fg is None:
+            self.__fg = ""
+        else:
+            self.__fg = getattr(colorama.Fore, self._fg)
+
+        if self._sty is None:
+            self.__sty = ""
+        else:
+            self.__sty = getattr(colorama.Style, self._sty)
+
+        if end is None:
+            self.__end = ""
+        else:
+            self.__end = end
+
+    @classmethod
+    @contextmanager
+    def lock(cls):
+        """"""
+        if cls.__lock__ is None:
+            yield
+            return
+
+        cls.__lock__.acquire()
+
+        try:
+            yield
+        finally:
+            cls.__lock__.release()
+
+    @classmethod
+    def config(cls, *, level: int | None = ..., lock_type: int | None = ...):
+
+        if level == ...:
+            pass
+        elif isinstance(level, int):
+            cls.__level__ = level
+        elif level is None:
+            cls.__level__ = level
+        else:
+            raise TypeError(
+                f"'level' must be of type 'int' or 'None, not '{type(level)}'"
             )
 
-        if params not in cls.__ref__:
-            cls.__ref__[params] = super().__new__(cls)
-        return cls.__ref__[params]
-
-    def __init__(self, lvl: int = 0, **kwargs: dict):
-        """
-        Parameters
-        ----------
-        lvl : int
-            Verbosity level.
-        **kwargs
-            bg : str
-                Background ANSI control sequence.
-            fg : str
-                Foreground ANSI control sequence.
-            sty : str
-                Style ANSI control sequence.
-            file : _io.TextIOWrapper
-                File object interface for writing to.
-        """
-
-        ## Set lvl
-        self.lvl = lvl
-
-        ## Gather parameters
-        bg, fg, sty, file = self.params = self.Params(**kwargs)
-
-        ## Gather escape sequences
-        self.bg = "" if bg is None else getattr(colorama.Back, bg)
-        self.fg = "" if fg is None else getattr(colorama.Fore, fg)
-        self.sty = "" if sty is None else getattr(colorama.Style, sty)
-
-        ## Set output file
-        self.file = file
-
-    def __repr__(self):
-        params = ", ".join(
-            [f"{key}={getattr(self.params, key)!r}" for key in ("bg", "fg", "sty")]
-        )
-        return f"{self.__class__.__name__}({self.lvl}, {params})"
-
-    def printf(self, *args, **kwargs) -> int:
-        """"""
-        if self.echo:
-            return self._printf(*args, **kwargs)
+        if lock_type == ...:
+            pass
+        elif lock_type == cls.T_LOCK:
+            cls.__lock__ = th.Lock()
+        elif lock_type == cls.P_LOCK:
+            cls.__lock__ = mp.Lock()
+        elif lock_type == None:
+            cls.__lock__ = None
         else:
-            return 0
+            raise ValueError("Invalid value for 'lock_type'")
 
-    def _printf(self, *args, **kwargs):
+    def __getitem__(self, level: int | None):
+        return CStream(
+            bg=self._bg,
+            fg=self._fg,
+            sty=self._sty,
+            end=self.__end,
+            file=self.__file,
+            level=level,
+        )
+
+    def __bool__(self):
+        return self.__echo__ and (
+            (self.__level is None)
+            or (self.__level__ is None)
+            or (self.__level >= self.__level__)
+        )
+
+    @classmethod
+    def echo_on(cls):
         """"""
-        print(self.bg, self.fg, self.sty, sep="", end="", file=self.file)
-        print(*args, **kwargs, file=self.file)
-        print(self.RESET, sep="", end="", file=self.file)
+        cls.__echo__ = True
 
-    def string(self, s: str):
-        """Generates formated string, appending and preppending respective ANSI control sequences.
+    @classmethod
+    def echo_off(cls):
+        """"""
+        cls.__echo__ = False
 
-        Parameters
-        ----------
-        s : str
-            Input string.
+    # -*- <stdio.h> -*-
+    @__echo
+    def printf(self, s: str, *args) -> None:
+        """"""
+        with self.lock():
+            print(self.sprintf(s, *args), end="", file=self.file, flush=self.flush)
 
-        Returns
-        -------
-        str
-            Formated string.
-        """
-        if self.bg or self.fg or self.sty:
-            return f"{self.RESET}{self.bg}{self.fg}{self.sty}{s}{self.RESET}"
+    def sprintf(self, s: str, *args) -> str:
+        """"""
+        if args:
+            if self.__bg or self.__fg or self.__sty:
+                return f"{self.__bg}{self.__fg}{self.__sty}{s}{self.RESET}" % args
+            else:
+                return s % args
+        elif self.__bg or self.__fg or self.__sty:
+            return f"{self.__bg}{self.__fg}{self.__sty}{s}{self.RESET}"
         else:
             return s
 
-    def __lshift__(self, s: str):
-        if self.echo:
-            print(self.string(s), file=self.file)
+    @__echo
+    def __lshift__(self, s: str | object):
+        with self.lock():
+            print(self.sprintf(str(s)), end=self.end, file=self.file, flush=self.flush)
         return self
 
-    def __getitem__(self, lvl: int):
-        return self.__class__(lvl, **self.params._asdict())
-
-    def __call__(self, **kwargs):
-        return self.__class__(self.lvl, **kwargs)
-
-    def __bool__(self) -> bool:
-        return self.echo
-
-    ## Block skip
-    class SkipBlock(Exception):
-        ...
-
-    def trace(self, *args, **kwargs):
-        raise self.SkipBlock()
-
-    def __enter__(self):
-        """Implements with-block skipping."""
-        if not self.echo:
-            sys.settrace(lambda *args, **kwargs: None)
-            frame = sys._getframe(1)
-            frame.f_trace = self.trace
-        else:
-            return self
-
-    def __exit__(self, type_, value, traceback):
-        """"""
-        if type_ is None:
-            return None
-        elif issubclass(type_, self.SkipBlock):
-            return True
-        else:
-            return None
-
-    ## File interface
-    def read(self):
-        raise OSError("Can't read from this stream.")
-
-    def write(self, s: str) -> int:
-        return self.printf(s)
+    # -*- File interface -*-
+    def write(self, s: str):
+        return self.file.write(s)
 
     @property
-    def echo(self):
-        return (self.__lvl__ is None) or (self.__lvl__ >= self.lvl)
+    def flush(self) -> bool:
+        return self.__flush or (self.__lock__ is not None)
 
-    @classmethod
-    def set_lvl(cls, lvl: int = None):
-        if lvl is None or type(lvl) is int:
-            cls.__lvl__ = lvl
-        else:
-            raise TypeError(
-                f"Invalid type `{type(lvl)}`` for debug lvl. Must be `int`."
-            )
+    @property
+    def file(self) -> TextIO:
+        return self.__file
 
+    @property
+    def end(self) -> str:
+        return self.__end
 
-class StringStream(Stream):
-    @wraps(Stream.__init__)
-    def __init__(self, *args, **kwargs):
-        Stream.__init__(self, *args, **kwargs)
-        self._string_io = StringIO()
-
-    def __lshift__(self, s: str):
-        if self.echo:
-            print(self.string(s), file=self._string_io)
-        return self
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args, **kwargs):
-        return None
-
-    def read(self) -> str:
-        return self._string_io.getvalue()
-
-    def write(self, s: str):
-        return self._string_io.write(s)
-
-
-class NullStream(object):
-    """Redirects both sys.stdout and sys.stderr to os.devnull."""
+class NullStream(CStream):
 
     __ref__ = None
 
-    def __new__(cls):
+    __slots__ = CStream.__slots__ + ("__sys_stdout", "__sys_stderr")
+
+    def __new__(cls, *__args, **__kwargs):
         if cls.__ref__ is None:
-            cls.__ref__ = object.__new__(cls)
+            cls.__ref__ = CStream.__new__(cls)
         return cls.__ref__
 
-    def __enter__(self, *args, **kwargs):
-        global sys
-        self.sys_stderr = sys.stderr
-        self.sys_stdout = sys.stdout
-        sys.stderr = sys.stdout = open(os.devnull, "w")
-        return self
+    @wraps(CStream.__init__)
+    def __init__(self, **__kwargs):
+        CStream.__init__(self, **__kwargs)
+        self.__sys_stdout = None
+        self.__sys_stderr = None
+
+    def __enter__(self):
+        self.__sys_stdout = sys.stdout
+        self.__sys_stderr = sys.stderr
+        sys.stdout = sys.stderr = self
 
     def __exit__(self, *args, **kwargs):
-        global sys
-        if not sys.stdout.closed:
-            sys.stdout.close()
-        if not sys.stderr.closed:
-            sys.stderr.close()
-        sys.stdout = self.sys_stdout
-        sys.stderr = self.sys_stderr
-        return None
+        sys.stdout = self.__sys_stdout
+        sys.stderr = self.__sys_stderr
+        self.__sys_stdout = None
+        self.__sys_stderr = None
+
+    def write(self, __s: str):
+        pass
 
     def read(self) -> str:
-        raise OSError("Can't read from this stream.")
+        raise IOError("Can't read from NullStream")
 
-    def write(self, s: str) -> int:
-        return 0
-
-
-class logfile:
-    """Duplicates STDERR file descriptor"""
-
-    def __init__(self):
-        self.fd = os.dup(STDERR_FD)
-        self.file = os.fdopen(self.fd, mode="w", encoding="utf-8")
-
-    def write(self, s: str) -> int:
-        return self.file.write(s)
-
-
-@contextmanager
-def redirect_stderr(target) -> Stream:
-    """"""
-    global sys
-    sys_stderr = sys.stderr
-    try:
-        sys.stderr = target
-        yield target
-    finally:
-        sys.stderr = sys_stderr
-        return
-
-
-@contextmanager
-def redirect_stdout(target) -> Stream:
-    """"""
-    global sys
-    sys_stdout = sys.stdout
-    try:
-        sys.stdout = target
-        yield target
-    finally:
-        sys.stdout = sys_stdout
-        return
-
-
-## Initialize shell environment
-colorama.init()
-os.system("")
-
-## Create default streams
-stderr = Stream(fg="RED", file=sys.stderr)
-stdwar = Stream(fg="YELLOW", file=sys.stderr)
-stdlog = Stream(fg="CYAN", file=logfile())  ## Initialize log file
-stdout = Stream(file=sys.stdout)
-stdstr = StringStream()
-devnull = NullStream()
-
-## Output
-__all__ = [
-    "Stream",
-    "StringStream",
-    "redirect_stdout",
-    "redirect_stderr",
-    "stderr",
-    "stdwar",
-    "stdlog",
-    "stdstr",
-    "devnull",
-]
+__all__ = ["CStream", "NullStream"]
